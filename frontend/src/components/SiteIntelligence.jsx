@@ -190,7 +190,10 @@ export default function SiteIntelligencePanel() {
 
       {selectedTab === 'map' && (
         <div className="bg-gray-900/40 border border-white/5 rounded-xl overflow-hidden">
-          <div id="map-container" className="w-full h-96 bg-gray-800"></div>
+          <div
+            id="map-container"
+            className="w-full h-[calc(100vh-240px)] min-h-[560px] bg-gray-800"
+          ></div>
         </div>
       )}
 
