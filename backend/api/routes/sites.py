@@ -13,10 +13,16 @@ import json
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import JSONResponse
 
-from api.schemas import (
-    SiteRanking, SiteRankingsResponse, SiteDetail, GeoJsonResponse, GeoFeature,
-    CoverageGap, CoverageGapsResponse, FactorScore, RescoreJob
-)
+try:
+    from backend.api.schemas import (
+        SiteRanking, SiteRankingsResponse, SiteDetail, GeoJsonResponse, GeoFeature,
+        CoverageGap, CoverageGapsResponse, FactorScore, RescoreJob
+    )
+except ModuleNotFoundError:
+    from api.schemas import (
+        SiteRanking, SiteRankingsResponse, SiteDetail, GeoJsonResponse, GeoFeature,
+        CoverageGap, CoverageGapsResponse, FactorScore, RescoreJob
+    )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -224,43 +230,6 @@ async def get_site_rankings(
     )
 
 
-@router.get("/{ward_id}", response_model=SiteDetail)
-async def get_site_detail(ward_id: str):
-    """
-    GET /api/sites/{ward_id}
-    Returns full site detail with all 7 factor scores, upgrade costs, and utilization forecast.
-    """
-    all_sites = generate_all_sites()
-    site = next((s for s in all_sites if s["ward_id"] == ward_id), None)
-    
-    if not site:
-        raise HTTPException(status_code=404, detail=f"Site {ward_id} not found")
-    
-    factors = [
-        FactorScore(
-            factor_name=f["factor_name"],
-            score=f.get("score", random.randint(60, 95)),
-            weight=f["weight"]
-        )
-        for f in site.get("factors", [])
-    ]
-    
-    return SiteDetail(
-        ward_id=site["ward_id"],
-        location_name=site["location_name"],
-        latitude=site["latitude"],
-        longitude=site["longitude"],
-        vidyut_score=site["vidyut_score"],
-        factors=factors,
-        grid_upgrade_cost_crore=site["grid_upgrade_cost_crore"],
-        year1_utilization_pct=site["year1_utilization_pct"],
-        year5_utilization_pct=site.get("year5_utilization_pct", site["year1_utilization_pct"] + 20),
-        ev_density_per_sqkm=site["ev_density_per_sqkm"],
-        traffic_index=random.uniform(0.3, 0.95),
-        renewable_potential_pct=random.uniform(15, 60)
-    )
-
-
 @router.get("/geojson", response_model=GeoJsonResponse)
 async def get_geojson():
     """
@@ -357,4 +326,41 @@ async def get_coverage_gaps():
         gaps=gaps,
         total_gap_count=len(gaps),
         queried_at=datetime.utcnow()
+    )
+
+
+@router.get("/{ward_id}", response_model=SiteDetail)
+async def get_site_detail(ward_id: str):
+    """
+    GET /api/sites/{ward_id}
+    Returns full site detail with all 7 factor scores, upgrade costs, and utilization forecast.
+    """
+    all_sites = generate_all_sites()
+    site = next((s for s in all_sites if s["ward_id"] == ward_id), None)
+
+    if not site:
+        raise HTTPException(status_code=404, detail=f"Site {ward_id} not found")
+
+    factors = [
+        FactorScore(
+            factor_name=f["factor_name"],
+            score=f.get("score", random.randint(60, 95)),
+            weight=f["weight"]
+        )
+        for f in site.get("factors", [])
+    ]
+
+    return SiteDetail(
+        ward_id=site["ward_id"],
+        location_name=site["location_name"],
+        latitude=site["latitude"],
+        longitude=site["longitude"],
+        vidyut_score=site["vidyut_score"],
+        factors=factors,
+        grid_upgrade_cost_crore=site["grid_upgrade_cost_crore"],
+        year1_utilization_pct=site["year1_utilization_pct"],
+        year5_utilization_pct=site.get("year5_utilization_pct", site["year1_utilization_pct"] + 20),
+        ev_density_per_sqkm=site["ev_density_per_sqkm"],
+        traffic_index=random.uniform(0.3, 0.95),
+        renewable_potential_pct=random.uniform(15, 60)
     )

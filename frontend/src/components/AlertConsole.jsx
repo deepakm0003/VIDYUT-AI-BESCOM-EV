@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, AlertTriangle, CheckCircle, Zap, Sliders } from 'lucide-react';
-import { useAlertStream, useFeederStatus } from '../hooks/useAPI';
+import { useAlertStream, useFeederStatus, useSchedulerOverride } from '../hooks/useAPI';
 import { formatTimestamp } from '../utils/formatters';
 
 export default function AlertConsole() {
   const [alerts, setAlerts] = useState([]);
-  const [overrideMode, setOverrideMode] = useState(null);
   const [selectedFeeder, setSelectedFeeder] = useState(null);
   const [threshold, setThreshold] = useState(85);
   const [action, setAction] = useState('curtail');
@@ -16,6 +15,7 @@ export default function AlertConsole() {
   });
 
   const { feeders, lastUpdated } = useFeederStatus();
+  const { loading: overrideLoading, error: overrideError, sendOverride } = useSchedulerOverride();
 
   const getSeverityColor = (severity) => {
     const colors = {
@@ -27,18 +27,18 @@ export default function AlertConsole() {
     return colors[severity] || 'bg-gray-500/20 text-gray-400 border-gray-500/50';
   };
 
-  const getSeverityIcon = (severity) => {
+  const getSeverityDotClass = (severity) => {
     switch (severity) {
       case 'CRITICAL':
-        return '🔴';
+        return 'bg-red-400';
       case 'WARNING':
-        return '🟠';
+        return 'bg-orange-400';
       case 'INFO':
-        return '🔵';
+        return 'bg-blue-400';
       case 'RESOLVED':
-        return '🟢';
+        return 'bg-green-400';
       default:
-        return '⚪';
+        return 'bg-gray-400';
     }
   };
 
@@ -62,30 +62,16 @@ export default function AlertConsole() {
     if (!selectedFeeder) return;
 
     try {
-      const response = await fetch('http://localhost:8000/api/scheduler/override', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          feeder_id: selectedFeeder,
-          threshold_pct: threshold,
-          action: action
-        })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        setAlerts(prev => [{
-          alert_id: `override-${Date.now()}`,
-          type: 'INFO',
-          feeder_id: selectedFeeder,
-          message: `Override ${action} applied to ${selectedFeeder}`,
-          load_pct: threshold,
-          timestamp: new Date().toISOString(),
-          action_taken: `${action} at ${threshold}%`
-        }, ...prev]);
-        setOverrideMode(null);
-        setSelectedFeeder(null);
-      }
+      await sendOverride(selectedFeeder, threshold, action);
+      setAlerts(prev => [{
+        alert_id: `override-${Date.now()}`,
+        type: 'INFO',
+        feeder_id: selectedFeeder,
+        message: `Manual override executed: ${action} on ${selectedFeeder}`,
+        load_pct: threshold,
+        timestamp: new Date().toISOString(),
+        action_taken: `${action} @ ${threshold}%`
+      }, ...prev]);
     } catch (err) {
       console.error('Override failed:', err);
     }
@@ -106,7 +92,7 @@ export default function AlertConsole() {
         </div>
         <div className="text-right">
           <div className={`text-sm font-semibold ${connected ? 'text-green-400' : 'text-red-400'}`}>
-            {connected ? '🟢 SSE Connected' : '🔴 Disconnected'}
+            {connected ? 'SSE Connected' : 'Disconnected'}
           </div>
           <p className="text-xs text-gray-400">Last update: {formatTimestamp(lastUpdated)}</p>
         </div>
@@ -164,7 +150,7 @@ export default function AlertConsole() {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3 flex-1">
-                    <span className="text-xl mt-1">{getSeverityIcon(alert.type)}</span>
+                    <span className={`w-2.5 h-2.5 rounded-full mt-2 ${getSeverityDotClass(alert.type)}`}></span>
                     <div className="flex-1">
                       <p className="font-semibold text-sm">{alert.message}</p>
                       <div className="flex items-center gap-3 mt-2 text-xs">
@@ -247,6 +233,11 @@ export default function AlertConsole() {
           </h3>
 
           <div className="space-y-4">
+            {overrideError && (
+              <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-sm text-red-300">
+                {overrideError}
+              </div>
+            )}
             {/* Feeder Selection */}
             <div>
               <label className="text-sm text-gray-400 mb-2 block">Select Feeder</label>
@@ -291,7 +282,7 @@ export default function AlertConsole() {
                           : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                       }`}
                     >
-                      🔴 Curtail
+                      Curtail
                     </button>
                     <button
                       onClick={() => setAction('restore')}
@@ -301,7 +292,7 @@ export default function AlertConsole() {
                           : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                       }`}
                     >
-                      🟢 Restore
+                      Restore
                     </button>
                   </div>
                 </div>
@@ -318,10 +309,11 @@ export default function AlertConsole() {
                 {/* Apply Button */}
                 <button
                   onClick={handleOverride}
+                  disabled={overrideLoading || !selectedFeeder}
                   className="w-full py-3 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 rounded-lg font-semibold text-white transition-all hover:shadow-lg hover:shadow-purple-500/50"
                 >
                   <Zap className="w-4 h-4 inline-block mr-2" />
-                  Apply Override
+                  {overrideLoading ? 'Applying...' : 'Apply Override'}
                 </button>
               </>
             )}

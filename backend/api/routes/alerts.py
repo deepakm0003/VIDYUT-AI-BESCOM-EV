@@ -15,9 +15,14 @@ from collections import deque
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from api.schemas import (
-    AlertEvent, AlertHistory, FeederStatus, FeedersStatusResponse
-)
+try:
+    from backend.api.schemas import (
+        AlertEvent, AlertHistory, FeederStatus, FeedersStatusResponse
+    )
+except ModuleNotFoundError:
+    from api.schemas import (
+        AlertEvent, AlertHistory, FeederStatus, FeedersStatusResponse
+    )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -114,7 +119,7 @@ async def alert_stream():
                     "action_taken": alert.action_taken,
                 }
                 
-                yield f"data: {alert_dict}\n\n"
+                yield f"data: {json.dumps(alert_dict)}\n\n"
                 
                 # Wait 10 seconds before next alert
                 await asyncio.sleep(10)

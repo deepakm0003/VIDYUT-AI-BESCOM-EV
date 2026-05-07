@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
 // ==================== FORECAST HOOKS ====================
 
@@ -425,6 +425,11 @@ export const useAlertStream = (onAlert) => {
   const [lastAlert, setLastAlert] = useState(null);
   const [alertCount, setAlertCount] = useState(0);
   const eventSourceRef = useRef(null);
+  const onAlertRef = useRef(onAlert);
+
+  useEffect(() => {
+    onAlertRef.current = onAlert;
+  }, [onAlert]);
 
   useEffect(() => {
     const connectStream = () => {
@@ -441,7 +446,7 @@ export const useAlertStream = (onAlert) => {
             const alert = JSON.parse(event.data);
             setLastAlert(alert);
             setAlertCount(prev => prev + 1);
-            if (onAlert) onAlert(alert);
+            if (onAlertRef.current) onAlertRef.current(alert);
           } catch (err) {
             console.error('Failed to parse alert:', err);
           }
@@ -469,7 +474,7 @@ export const useAlertStream = (onAlert) => {
         eventSourceRef.current.close();
       }
     };
-  }, [onAlert]);
+  }, []);
 
   return { connected, lastAlert, alertCount };
 };
@@ -621,7 +626,8 @@ export const useSchedulerOverride = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`Override API error: ${response.statusText}`);
+        const text = await response.text().catch(() => '');
+        throw new Error(`Override API error: ${response.status} ${response.statusText}${text ? ` — ${text}` : ''}`);
       }
 
       const data = await response.json();

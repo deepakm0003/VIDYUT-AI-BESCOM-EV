@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Zap, Play, CheckCircle, AlertCircle, Gauge } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useScheduler, useZoneList, useFeederStatus } from '../hooks/useAPI';
@@ -9,6 +9,24 @@ export default function SmartSchedulerPanel() {
   const { zones } = useZoneList();
   const { result, loading, progress, runScheduler } = useScheduler();
   const { feeders } = useFeederStatus();
+
+  const zoneOptions = useMemo(() => {
+    if (zones && zones.length > 0) return zones;
+    return [
+      { zone_id: 'whitefield', current_load_mw: 0, capacity_mw: 150 },
+      { zone_id: 'koramangala', current_load_mw: 0, capacity_mw: 120 },
+      { zone_id: 'yelahanka', current_load_mw: 0, capacity_mw: 100 },
+      { zone_id: 'bommanahalli', current_load_mw: 0, capacity_mw: 110 },
+      { zone_id: 'hebbal', current_load_mw: 0, capacity_mw: 95 },
+      { zone_id: 'indiranagar', current_load_mw: 0, capacity_mw: 105 }
+    ];
+  }, [zones]);
+
+  useEffect(() => {
+    if (!zoneOptions.find((z) => z.zone_id === selectedZone)) {
+      setSelectedZone(zoneOptions[0]?.zone_id || 'whitefield');
+    }
+  }, [zoneOptions, selectedZone]);
 
   const handleRunScheduler = async () => {
     await runScheduler({
@@ -52,7 +70,7 @@ export default function SmartSchedulerPanel() {
             disabled={loading}
             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-primary disabled:opacity-50"
           >
-            {zones.map((zone) => (
+            {zoneOptions.map((zone) => (
               <option key={zone.zone_id} value={zone.zone_id}>
                 {zone.zone_id.toUpperCase()} - {zone.current_load_mw.toFixed(1)} MW / {zone.capacity_mw} MW
               </option>

@@ -2,7 +2,7 @@
 Pydantic v2 schemas for VIDYUT AI API endpoints.
 """
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from typing import Optional, List, Dict, Literal
 from datetime import datetime
 from uuid import UUID
@@ -50,6 +50,8 @@ class PredictRequest(BaseModel):
 
 
 class PredictResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     zone_id: str
     generated_at: datetime
     horizon_hours: int

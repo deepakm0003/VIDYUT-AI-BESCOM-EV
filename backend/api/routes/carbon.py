@@ -11,11 +11,19 @@ import json
 import random
 
 from fastapi import APIRouter, Query, HTTPException
+from fastapi import Response
+from io import BytesIO
 
-from api.schemas import (
-    CarbonSummary, MonthlyBreakdown, MonthlyCarbonData, BeeCertificate,
-    CarbonComputeRequest, CarbonComputeResult
-)
+try:
+    from backend.api.schemas import (
+        CarbonSummary, MonthlyBreakdown, MonthlyCarbonData, BeeCertificate,
+        CarbonComputeRequest, CarbonComputeResult
+    )
+except ModuleNotFoundError:
+    from api.schemas import (
+        CarbonSummary, MonthlyBreakdown, MonthlyCarbonData, BeeCertificate,
+        CarbonComputeRequest, CarbonComputeResult
+    )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -130,27 +138,14 @@ async def get_monthly_breakdown(
     )
 
 
-@router.get("/certificate/{month}", response_model=BeeCertificate)
-async def get_bee_certificate(month: str):
-    """
-    GET /api/carbon/certificate/{month}
-    Returns BEE certificate data for the specified month.
-    Format: YYYY-MM (e.g., "2026-05")
-    """
-    # Find matching month data
+def _build_bee_certificate(month: str) -> BeeCertificate:
     month_data = next((m for m in CARBON_HISTORY if m["month"] == month), None)
-    
     if not month_data:
         raise HTTPException(status_code=404, detail=f"No data for month {month}")
-    
-    # Parse month to create certificate number
-    year, month_num = month.split("-")
+    year, _month_num = month.split("-")
     cert_number = f"BEE/{year}/VIDYUT/{str(int(month_data['mwh_shifted'])).zfill(4)}"
-    
-    # Calculate validity (issued immediately, valid for 1 year)
     issued_date = datetime.strptime(f"{month}-01", "%Y-%m-%d")
     valid_until = issued_date + timedelta(days=365)
-    
     return BeeCertificate(
         certificate_number=cert_number,
         period=month,
@@ -161,8 +156,86 @@ async def get_bee_certificate(month: str):
         capex_savings_crore=month_data["capex_savings_crore"],
         issued_at=issued_date,
         valid_until=valid_until,
-        issuing_authority="Bureau of Energy Efficiency (BEE), Ministry of Power, Govt. of India"
+        issuing_authority="Bureau of Energy Efficiency (BEE), Ministry of Power, Govt. of India",
     )
+
+
+@router.get("/certificate/{month}.pdf")
+async def get_bee_certificate_pdf(month: str):
+    """
+    GET /api/carbon/certificate/{month}.pdf
+    Downloads the BEE certificate as a PDF file.
+    """
+    cert = _build_bee_certificate(month)
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import cm
+    from reportlab.pdfgen import canvas
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    y = height - 2.0 * cm
+    c.setFont("Helvetica-Bold", 18)
+    c.drawString(2.0 * cm, y, "BEE Demand Response Certificate (Demo)")
+    y -= 0.7 * cm
+
+    c.setFont("Helvetica", 11)
+    c.drawString(2.0 * cm, y, "Issuer: Bureau of Energy Efficiency (BEE), Ministry of Power, Govt. of India")
+    y -= 0.9 * cm
+
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(2.0 * cm, y, "Certificate Details")
+    y -= 0.6 * cm
+
+    c.setFont("Helvetica", 11)
+    lines = [
+        f"Certificate Number: {cert.certificate_number}",
+        f"Utility / Zone: {cert.zone}",
+        f"Period: {cert.period}",
+        f"Issued At: {cert.issued_at.isoformat()}",
+        f"Valid Until: {cert.valid_until.isoformat()}",
+        "",
+        "Verified Outcomes",
+        f"MWh Shifted (off-peak alignment): {cert.mwh_shifted:.2f} MWh",
+        f"CO2 Avoided: {cert.co2_tonnes:.2f} tonnes",
+        f"Carbon Credit Value: {cert.carbon_credits_value_crore:.3f} Cr INR",
+        f"CAPEX Savings: {cert.capex_savings_crore:.3f} Cr INR",
+        "",
+        "Notes",
+        "This PDF is generated from VIDYUT AI demo data for hackathon submission purposes.",
+        "All integrations are read-only and contain no user PII.",
+    ]
+    for line in lines:
+        if y < 2.5 * cm:
+            c.showPage()
+            y = height - 2.0 * cm
+            c.setFont("Helvetica", 11)
+        c.drawString(2.0 * cm, y, line)
+        y -= 0.5 * cm
+
+    c.showPage()
+    c.save()
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+
+    safe_month = month.replace("/", "-")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=BEE_Certificate_{safe_month}.pdf"},
+    )
+
+
+@router.get("/certificate/{month}", response_model=BeeCertificate)
+async def get_bee_certificate(month: str):
+    """
+    GET /api/carbon/certificate/{month}
+    Returns BEE certificate data for the specified month.
+    Format: YYYY-MM (e.g., "2026-05")
+    """
+    return _build_bee_certificate(month)
 
 
 @router.post("/compute", response_model=CarbonComputeResult)

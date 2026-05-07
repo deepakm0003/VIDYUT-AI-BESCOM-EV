@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { TrendingUp, Download, Award, Leaf, BarChart3 } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useCarbonSummary, useCarbonMonthly, useCarbonCertificate } from '../hooks/useAPI';
@@ -9,22 +9,34 @@ export default function CarbonCredits() {
   const [projectionYears, setProjectionYears] = useState(1);
   
   const { summary, loading: summaryLoading } = useCarbonSummary();
-  const { monthly, loading: monthlyLoading } = useCarbonMonthly();
+  const { data: monthlyDataRaw, loading: monthlyLoading } = useCarbonMonthly();
   const { certificate, loading: certLoading } = useCarbonCertificate(selectedMonth);
 
   // Calculate revenue projection
-  const projectedRevenue = summary ? summary.revenue_crore * projectionYears * 1.05 : 0;
-  const monthlyData = monthly || [];
-  const avgMonthly = monthlyData.length > 0 ? monthlyData.reduce((sum, m) => sum + m.revenue_crore, 0) / monthlyData.length : 0;
+  const projectedRevenue = summary ? (summary.total_carbon_revenue_crore || 0) * projectionYears * 1.05 : 0;
+  const monthlyData = monthlyDataRaw || [];
+  const avgMonthly =
+    monthlyData.length > 0
+      ? monthlyData.reduce((sum, m) => sum + (m.carbon_credits_revenue_crore || 0), 0) / monthlyData.length
+      : 0;
 
-  const handleDownloadCert = () => {
-    if (certificate) {
-      const element = document.createElement('a');
-      element.href = certificate.download_url;
-      element.download = `BEE_Certificate_${selectedMonth}.pdf`;
-      document.body.appendChild(element);
-      element.click();
-      document.body.removeChild(element);
+  const handleDownloadCert = async () => {
+    if (!selectedMonth) return;
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+      const res = await fetch(`${API_BASE}/api/carbon/certificate/${selectedMonth}.pdf`);
+      if (!res.ok) throw new Error('Failed to download certificate PDF');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `BEE_Certificate_${selectedMonth}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -47,10 +59,10 @@ export default function CarbonCredits() {
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[
-            { label: 'Total MWh Shifted', value: formatNumber(summary.total_mwh_shifted), icon: '⚡', color: 'from-blue-500/20 to-blue-500/5', border: 'border-blue-500/30' },
-            { label: 'CO₂ Avoided', value: formatCO2(summary.co2_avoided_tonnes), icon: '🌍', color: 'from-green-500/20 to-green-500/5', border: 'border-green-500/30' },
-            { label: 'Revenue Earned', value: formatCurrency(summary.revenue_crore * 1e7), icon: '💚', color: 'from-emerald-500/20 to-emerald-500/5', border: 'border-emerald-500/30' },
-            { label: 'Months Tracked', value: summary.months_tracked, icon: '📅', color: 'from-purple-500/20 to-purple-500/5', border: 'border-purple-500/30' }
+            { label: 'Total MWh Shifted', value: formatNumber(summary.total_mwh_shifted), icon: null, color: 'from-blue-500/20 to-blue-500/5', border: 'border-blue-500/30' },
+            { label: 'CO₂ Avoided', value: formatCO2(summary.total_co2_avoided_tonnes), icon: null, color: 'from-green-500/20 to-green-500/5', border: 'border-green-500/30' },
+            { label: 'Revenue Earned', value: formatCurrency((summary.total_carbon_revenue_crore || 0) * 1e7), icon: null, color: 'from-emerald-500/20 to-emerald-500/5', border: 'border-emerald-500/30' },
+            { label: 'Months Tracked', value: summary.months_tracked, icon: null, color: 'from-purple-500/20 to-purple-500/5', border: 'border-purple-500/30' }
           ].map((stat, i) => (
             <div key={i} className={`bg-gradient-to-br ${stat.color} border ${stat.border} rounded-xl p-4 transform hover:scale-105 transition-all`}>
               <div className="flex items-start justify-between">
@@ -58,7 +70,6 @@ export default function CarbonCredits() {
                   <p className="text-xs text-gray-400 mb-1">{stat.label}</p>
                   <p className="text-xl font-bold text-white">{stat.value}</p>
                 </div>
-                <span className="text-2xl">{stat.icon}</span>
               </div>
             </div>
           ))}
@@ -81,7 +92,7 @@ export default function CarbonCredits() {
               <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid rgba(255,255,255,0.1)' }} />
               <Legend />
               <Bar dataKey="mwh_shifted" fill="#0EA5E9" name="MWh Shifted" radius={[8, 8, 0, 0]} />
-              <Bar dataKey="revenue_crore" fill="#10B981" name="Revenue (Cr)" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="carbon_credits_revenue_crore" fill="#10B981" name="Revenue (Cr)" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -169,12 +180,15 @@ export default function CarbonCredits() {
             <p className="text-sm text-gray-300">
               <strong>Certificate ID:</strong> {certificate.certificate_id}
             </p>
-            <p className="text-sm text-gray-300 mt-2">
+              <p className="text-sm text-gray-300 mt-2">
               <strong>Issued by:</strong> Bureau of Energy Efficiency (BEE)
             </p>
             <p className="text-sm text-gray-300 mt-2">
               <strong>MWh Shifted:</strong> {formatEnergy(certificate.mwh_shifted)}
             </p>
+              <p className="text-sm text-gray-300 mt-2">
+                <strong>CO₂ Avoided:</strong> {formatCO2(certificate.co2_tonnes)}
+              </p>
           </div>
         )}
       </div>

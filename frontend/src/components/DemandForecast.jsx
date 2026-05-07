@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { TrendingUp, RefreshCw, AlertCircle, Download } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useForecast, useZoneList } from '../hooks/useAPI';
@@ -8,6 +8,24 @@ export default function DemandForecastPanel() {
   const [horizonHours, setHorizonHours] = useState(24);
   const { zones } = useZoneList();
   const { data, loading, error, refetch } = useForecast(selectedZone, horizonHours);
+
+  const zoneOptions = useMemo(() => {
+    if (zones && zones.length > 0) return zones;
+    return [
+      { zone_id: 'whitefield', current_load_mw: 0, capacity_mw: 150 },
+      { zone_id: 'koramangala', current_load_mw: 0, capacity_mw: 120 },
+      { zone_id: 'yelahanka', current_load_mw: 0, capacity_mw: 100 },
+      { zone_id: 'bommanahalli', current_load_mw: 0, capacity_mw: 110 },
+      { zone_id: 'hebbal', current_load_mw: 0, capacity_mw: 95 },
+      { zone_id: 'indiranagar', current_load_mw: 0, capacity_mw: 105 }
+    ];
+  }, [zones]);
+
+  useEffect(() => {
+    if (!zoneOptions.find((z) => z.zone_id === selectedZone)) {
+      setSelectedZone(zoneOptions[0]?.zone_id || 'whitefield');
+    }
+  }, [zoneOptions, selectedZone]);
 
   const getSeverityColor = (severity) => {
     const colors = {
@@ -59,7 +77,7 @@ export default function DemandForecastPanel() {
             onChange={(e) => setSelectedZone(e.target.value)}
             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-primary"
           >
-            {zones.map((zone) => (
+            {zoneOptions.map((zone) => (
               <option key={zone.zone_id} value={zone.zone_id}>
                 {zone.zone_id.toUpperCase()} - {zone.current_load_mw.toFixed(1)} MW / {zone.capacity_mw} MW
               </option>
@@ -203,8 +221,10 @@ export default function DemandForecastPanel() {
               <h3 className="text-lg font-semibold text-white mb-4">Peak Risk Window</h3>
               {data.peak_risk_window && (
                 <div className={`p-4 rounded-lg border ${getSeverityColor(data.peak_risk_window.severity)}`}>
-                  <p className="font-semibold">{data.peak_risk_window.time_window}</p>
-                  <p className="text-sm mt-1">{data.peak_risk_window.peak_load_mw?.toFixed(1)} MW peak expected</p>
+                  <p className="font-semibold">
+                    {new Date(data.peak_risk_window.start).toLocaleString()} - {new Date(data.peak_risk_window.end).toLocaleString()}
+                  </p>
+                  <p className="text-sm mt-1">Peak window identified for feeder stress management</p>
                   <p className="text-xs mt-2 opacity-80">{data.peak_risk_window.severity} severity</p>
                 </div>
               )}

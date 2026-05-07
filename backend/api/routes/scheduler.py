@@ -11,10 +11,16 @@ import time
 
 from fastapi import APIRouter, HTTPException
 
-from api.schemas import (
-    ScheduleRequest, ScheduleResult, ScheduleAssignment, BmtcSequence,
-    DigitalTwinValidation, SchedulerStatus, OverrideRequest
-)
+try:
+    from backend.api.schemas import (
+        ScheduleRequest, ScheduleResult, ScheduleAssignment, BmtcSequence,
+        DigitalTwinValidation, SchedulerStatus, OverrideRequest
+    )
+except ModuleNotFoundError:
+    from api.schemas import (
+        ScheduleRequest, ScheduleResult, ScheduleAssignment, BmtcSequence,
+        DigitalTwinValidation, SchedulerStatus, OverrideRequest
+    )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -274,8 +280,9 @@ async def manual_override(request: OverrideRequest):
     Emergency manual override for feeder curtailment or restoration.
     Sends immediate curtailment signal to all EV chargers on that feeder.
     """
-    if request.feeder_id not in FEEDERS:
-        raise HTTPException(status_code=400, detail=f"Unknown feeder: {request.feeder_id}")
+    # Accept any feeder id in demo mode (alerts may surface synthetic IDs like F-1000..F-1499).
+    if not request.feeder_id.startswith("F-"):
+        raise HTTPException(status_code=400, detail=f"Invalid feeder id: {request.feeder_id}")
     
     action_log = {
         "override_id": str(uuid4()),
@@ -288,9 +295,6 @@ async def manual_override(request: OverrideRequest):
     
     if request.action == "curtail":
         # Simulate sending curtailment signal
-        feeder_status = FEEDERS[request.feeder_id]
-        current_headroom = feeder_status["headroom_before"]
-        
         action_log["message"] = f"Curtailment signal sent: reduce load to keep headroom ≥ {request.threshold_pct}%"
         action_log["affected_evcs_count"] = random.randint(5, 15)
         action_log["estimated_reduction_kw"] = random.randint(50, 150)
