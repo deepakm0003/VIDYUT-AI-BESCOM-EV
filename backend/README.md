@@ -144,16 +144,22 @@ Once running, visit:
 
 ## 💾 Data Files
 
-Expected data structure:
+The `backend/data/` directory is excluded from source control and must be created locally when you clone the repository.
+
+Expected local data structure:
 ```
-data/
+backend/data/
 ├── models/
 │   └── lstm_zone_1_24h.pt      # PyTorch LSTM checkpoint
 ├── processed/
 │   ├── site_rankings.json      # Pre-computed site scores
 │   ├── carbon_credits_history.json  # Historical carbon data
+│   ├── carbon_credits_history.parquet
 │   ├── feature_manifest.json   # Feature engineering config
-│   └── bee_certificate_2024-01.json
+│   ├── forecast_features.parquet
+│   ├── scheduler_features.parquet
+│   ├── site_rankings.parquet
+│   └── site_scoring_features.parquet
 └── raw/
     ├── ev_sessions.csv         # EV charging sessions
     ├── feeder_load_data.csv    # Historical feeder loads
@@ -163,6 +169,12 @@ data/
     ├── data_manifest.json
     └── feature_engineering.py
 ```
+
+### Local Setup Instructions
+1. Create the `backend/data/` folder locally.
+2. Add your model checkpoint(s) to `backend/data/models/`.
+3. Add raw and processed dataset files to the corresponding subfolders.
+4. Confirm the backend can load the files before starting the server.
 
 ## 🔐 Authentication
 

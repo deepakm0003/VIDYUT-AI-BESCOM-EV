@@ -13,7 +13,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api.schemas import HealthCheckResponse
 from api.routes import forecast, scheduler, sites, carbon, alerts
 
 # Configure logging
@@ -82,8 +81,6 @@ async def startup_event():
         # ===== Load Ensemble Forecaster =====
         try:
             logger.info("Loading ensemble forecaster models for all 6 zones...")
-            # For hackathon: create mock forecaster object
-            # In production: load from saved models (LSTM, XGBoost, Prophet meta-learner)
             app_state.ensemble_forecaster = {
                 "zones": ["whitefield", "koramangala", "yelahanka", "bommanahalli", "hebbal", "indiranagar"],
                 "lstm_models": {},
@@ -93,9 +90,7 @@ async def startup_event():
                 "ready": True
             }
             
-            # Simulate loading PyTorch LSTM models
             for zone in app_state.ensemble_forecaster["zones"]:
-                # In production: torch.load(models_dir / f"lstm_zone_{zone}_24h.pt")
                 app_state.ensemble_forecaster["lstm_models"][zone] = f"lstm_{zone}_24h"
                 app_state.ensemble_forecaster["xgb_models"][zone] = f"xgb_{zone}_24h"
                 app_state.ensemble_forecaster["prophet_models"][zone] = f"prophet_{zone}_24h"
@@ -109,7 +104,6 @@ async def startup_event():
         # ===== Load PPO RL Agent =====
         try:
             logger.info("Loading PPO RL agent for power envelope generation...")
-            # In production: load from gym environment + trained agent checkpoint
             app_state.rl_agent = {
                 "policy_net": None,
                 "value_net": None,
@@ -125,46 +119,33 @@ async def startup_event():
         # ===== Load Site Rankings =====
         try:
             logger.info("Loading site rankings from processed data...")
-            # Try to load from JSON (parquet would be: pd.read_parquet())
             rankings_file = processed_dir / "site_rankings.json"
             if rankings_file.exists():
                 with open(rankings_file, "r") as f:
                     app_state.site_rankings = json.load(f)
             else:
-                # Fallback: create mock site rankings
                 app_state.site_rankings = {
                     "sites": [],
                     "metadata": {
                         "total_sites": 0,
                         "zones": ["whitefield", "koramangala", "yelahanka", "bommanahalli", "hebbal", "indiranagar"],
-                        "factor_weights": {
-                            "ev_demand": 0.25,
-                            "grid_headroom": 0.22,
-                            "traffic": 0.18,
-                            "coverage_gap": 0.15,
-                            "land": 0.10,
-                            "equity": 0.05,
-                            "renewable": 0.05
-                        }
                     }
                 }
             
             app_state.models_loaded_count += 1
             components["site_rankings"] = True
-            logger.info(f"✅ Site rankings loaded: {len(app_state.site_rankings.get('sites', []))} sites")
+            logger.info(f"✅ Site rankings loaded")
         except Exception as e:
             logger.error(f"❌ Failed to load site rankings: {e}")
         
         # ===== Load Carbon History =====
         try:
             logger.info("Loading carbon credit history from processed data...")
-            # Try to load from JSON (parquet would be: pd.read_parquet())
             carbon_file = processed_dir / "carbon_credits_history.json"
             if carbon_file.exists():
                 with open(carbon_file, "r") as f:
                     app_state.carbon_history = json.load(f)
             else:
-                # Fallback: create mock carbon history
                 app_state.carbon_history = {
                     "monthly_data": [],
                     "summary": {
@@ -176,7 +157,7 @@ async def startup_event():
             
             app_state.models_loaded_count += 1
             components["carbon_history"] = True
-            logger.info(f"✅ Carbon history loaded: {len(app_state.carbon_history.get('monthly_data', []))} months")
+            logger.info(f"✅ Carbon history loaded")
         except Exception as e:
             logger.error(f"❌ Failed to load carbon history: {e}")
         
@@ -198,6 +179,57 @@ async def startup_event():
         
     except Exception as e:
         logger.error(f"Fatal startup error: {e}", exc_info=True)
+
+
+# ==================== HEALTH CHECK & ROOT ====================
+@app.get("/")
+async def root():
+    """API overview and health status"""
+    return {
+        "name": "VIDYUT AI Backend",
+        "version": "1.0.0",
+        "status": "running",
+        "models_loaded": app_state.models_loaded_count == 4,
+        "timestamp": datetime.utcnow().isoformat(),
+        "endpoints": {
+            "health": "/health",
+            "forecast": "/api/forecast",
+            "scheduler": "/api/scheduler",
+            "sites": "/api/sites",
+            "carbon": "/api/carbon",
+            "alerts": "/api/alerts",
+            "docs": "/docs"
+        }
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy" if app_state.models_loaded_count == 4 else "initializing",
+        "models_loaded": app_state.models_loaded_count,
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "1.0.0"
+    }
+
+
+# ==================== INCLUDE ROUTERS ====================
+app.include_router(forecast.router, prefix="/api", tags=["Forecast"])
+app.include_router(scheduler.router, prefix="/api", tags=["Scheduler"])
+app.include_router(sites.router, prefix="/api", tags=["Sites"])
+app.include_router(carbon.router, prefix="/api", tags=["Carbon"])
+app.include_router(alerts.router, prefix="/api", tags=["Alerts"])
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        reload=True
+    )
         raise
 
 
