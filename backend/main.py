@@ -23,6 +23,11 @@ try:
 except ModuleNotFoundError:
     from api.routes import forecast, scheduler, sites, carbon, alerts
 
+try:
+    from backend.utils.demo_bootstrap import ensure_demo_artifacts
+except ModuleNotFoundError:
+    from utils.demo_bootstrap import ensure_demo_artifacts
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -120,6 +125,14 @@ async def startup_event():
     data_dir = backend_dir / "data"
     models_dir = data_dir / "models"
     processed_dir = data_dir / "processed"
+
+    # If no processed artifacts exist (common on Render), generate small demo artifacts.
+    try:
+        created = ensure_demo_artifacts(backend_dir)
+        if created:
+            logger.info(f"Demo artifacts created: {list(created.keys())}")
+    except Exception as e:
+        logger.warning(f"Demo bootstrap skipped/failed: {e}")
     
     # Track loaded components
     components = {
