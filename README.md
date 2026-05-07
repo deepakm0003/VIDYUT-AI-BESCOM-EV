@@ -37,3 +37,4 @@ backend/data/
 3. Add your dataset files and ML model checkpoint.
 4. Install dependencies and run the backend.
 
+# VIDYUT-AI
