@@ -505,6 +505,7 @@ export const useFeederStatus = () => {
   const [feeders, setFeeders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -515,6 +516,7 @@ export const useFeederStatus = () => {
         
         const result = await response.json();
         setFeeders(result.feeders || []);
+        setLastUpdated(new Date().toISOString());
       } catch (err) {
         setError(err.message);
       } finally {
@@ -530,7 +532,7 @@ export const useFeederStatus = () => {
     return () => clearInterval(interval);
   }, []);
 
-  return { feeders, loading, error };
+  return { feeders, loading, error, lastUpdated };
 };
 
 export const useAlertSummary = () => {
